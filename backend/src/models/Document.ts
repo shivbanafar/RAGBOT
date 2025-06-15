@@ -29,6 +29,12 @@ const chunkSchema = new mongoose.Schema({
     type: [Number],
     required: true,
     index: true, // This enables vector search in MongoDB Atlas
+    validate: {
+      validator: function(v: number[]) {
+        return v.length === 128; // Optimized: 128-dimensional embeddings
+      },
+      message: 'Embedding must be 128-dimensional'
+    }
   },
   metadata: {
     source: {
@@ -63,6 +69,7 @@ const documentSchema = new mongoose.Schema({
 
 // Create indexes for better query performance
 documentSchema.index({ userId: 1, createdAt: -1 });
-documentSchema.index({ 'chunks.embedding': 'vector' }); // This enables vector search in MongoDB Atlas
+// Note: Vector search index requires MongoDB Atlas with vector search enabled
+// documentSchema.index({ 'chunks.embedding': 'vector' });
 
 export const Document = mongoose.models.Document || mongoose.model<IDocument>('Document', documentSchema); 

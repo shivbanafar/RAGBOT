@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loading } from '@/components/ui/loading'
 
 interface User {
   id: string
@@ -25,18 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
-  // Handle hydration
+  // Check for existing token on mount
   useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // Check for existing token on mount (only after hydration)
-  useEffect(() => {
-    if (!mounted) return
-
     const storedToken = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
     
@@ -46,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     setLoading(false)
-  }, [mounted])
+  }, [])
 
   const login = async (email: string, password: string) => {
     try {
@@ -112,11 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     router.push('/login')
-  }
-
-  // Don't render children until mounted to prevent hydration mismatch
-  if (!mounted) {
-    return <Loading />
   }
 
   return (

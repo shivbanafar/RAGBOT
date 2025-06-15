@@ -13,7 +13,7 @@ const result = config({ path: path.resolve(__dirname, '../.env') });
 
 if (result.error) {
   console.error('Error loading .env file:', result.error);
-  process.exit(1);
+  console.log('Continuing without .env file...');
 }
 
 // Debug: Log environment variables (excluding sensitive data)
@@ -27,18 +27,33 @@ console.log('Environment loaded:', {
 // Import routes
 import authRoutes from './routes/auth';
 import chatRoutes from './routes/chat';
-import documentRoutes from './routes/document';
+import documentRoutes from './routes/documents';
 
 // Create Express app
 const app = express();
 
+// MongoDB connection string from environment variable
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  console.error('MONGODB_URI environment variable is not set');
+  process.exit(1);
+}
+
 // Connect to MongoDB
 mongoose
-  .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/rag-chat')
+  .connect(MONGODB_URI, {
+    maxPoolSize: 5, // Limit connection pool to reduce memory usage
+    minPoolSize: 1,
+    maxIdleTimeMS: 30000, // Close idle connections after 30 seconds
+    serverSelectionTimeoutMS: 5000, // Timeout for server selection
+    socketTimeoutMS: 45000, // Timeout for socket operations
+    bufferCommands: false, // Disable mongoose buffering
+  })
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => {
     console.error('MongoDB connection error:', err);
-    process.exit(1);
+    console.log('Server will continue with in-memory storage fallback');
   });
 
 // Security middleware

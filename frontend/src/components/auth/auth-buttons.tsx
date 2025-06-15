@@ -1,24 +1,25 @@
 "use client"
 
-import { signIn, signOut, useSession } from "next-auth/react"
+import { useAuth } from "@/components/providers/auth-provider"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 export function AuthButtons() {
-  const { data: session, status } = useSession()
+  const { user, logout, loading } = useAuth()
 
-  if (status === "loading") {
+  if (loading) {
     return <Button variant="ghost" disabled>Loading...</Button>
   }
 
-  if (session) {
+  if (user) {
     return (
       <div className="flex items-center gap-4">
         <span className="text-sm text-muted-foreground">
-          {session.user?.email}
+          {user.email}
         </span>
         <Button
           variant="ghost"
-          onClick={() => signOut({ callbackUrl: "/" })}
+          onClick={logout}
         >
           Logout
         </Button>
@@ -27,11 +28,17 @@ export function AuthButtons() {
   }
 
   return (
-    <Button
-      variant="ghost"
-      onClick={() => signIn("google", { callbackUrl: "/chat" })}
-    >
-      Login with Google
-    </Button>
+    <div className="flex items-center gap-2">
+      <Link href="/login">
+        <Button variant="ghost">
+          Login
+        </Button>
+      </Link>
+      <Link href="/register">
+        <Button variant="outline">
+          Register
+        </Button>
+      </Link>
+    </div>
   )
 } 

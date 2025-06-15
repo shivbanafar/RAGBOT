@@ -9,6 +9,12 @@ interface JwtPayload {
   exp: number;
 }
 
+// In-memory user storage reference (same as in auth.ts)
+declare global {
+  var inMemoryUsers: Map<string, any>;
+}
+global.inMemoryUsers = global.inMemoryUsers || new Map();
+
 export const protect = async (
   req: Request,
   res: Response,
@@ -26,7 +32,7 @@ export const protect = async (
     // 2) Verify token
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || 'your-secret-key'
+      'your-super-secret-jwt-key-here'
     ) as JwtPayload;
 
     // 3) Check if user still exists
