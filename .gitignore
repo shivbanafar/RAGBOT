@@ -1,20 +1,28 @@
 # dependencies
 node_modules
-.pnp
+/.pnp
 .pnp.js
 
 # testing
-coverage
+/coverage
 
 # next.js
-.next/
-out/
-build
-dist
+/.next/
+/out/
+.next
+
+# production
+/build
+/dist
 
 # misc
 .DS_Store
 *.pem
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # debug
 npm-debug.log*
@@ -22,7 +30,6 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env
 .env*.local
 
 # vercel
@@ -34,4 +41,23 @@ next-env.d.ts
 
 # IDE
 .idea
-.vscode 
+.vscode
+*.swp
+*.swo
+
+# uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# logs
+logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db 

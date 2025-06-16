@@ -11,7 +11,7 @@ import { Upload, File, X, Send } from "lucide-react"
 interface Message {
   role: "user" | "assistant"
   content: string
-  timestamp: Date
+  timestamp: string | Date
   sources?: Array<{
     text: string
     metadata: {
@@ -49,14 +49,21 @@ export function ChatInterface() {
 
   const loadDocuments = async () => {
     try {
+      console.log('Fetching documents list');
       const response = await fetch("/api/documents", {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       })
+      console.log('Documents response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json()
+        console.log('Documents loaded:', data);
         setDocuments(data)
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to load documents:', errorData);
       }
     } catch (error) {
       console.error("Failed to load documents:", error)
@@ -65,7 +72,16 @@ export function ChatInterface() {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+
+    console.log('Starting file upload:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
 
     setIsUploading(true)
     const formData = new FormData()
@@ -73,6 +89,7 @@ export function ChatInterface() {
     formData.append("title", file.name)
 
     try {
+      console.log('Sending upload request to /api/documents/upload');
       const response = await fetch("/api/documents/upload", {
         method: "POST",
         headers: {
@@ -81,19 +98,27 @@ export function ChatInterface() {
         body: formData,
       })
 
+      console.log('Upload response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error("Failed to upload document")
+        const errorData = await response.json();
+        console.error('Upload failed:', errorData);
+        throw new Error(errorData.error || "Failed to upload document")
       }
 
       const data = await response.json()
+      console.log('Upload successful:', data);
+      
       toast({
         title: "Success",
         description: `Document "${data.document.title}" uploaded successfully!`,
       })
 
       // Reload documents list
-      loadDocuments()
+      console.log('Reloading documents list');
+      await loadDocuments()
     } catch (error) {
+      console.error('Error in handleFileUpload:', error);
       toast({
         title: "Error",
         description: "Failed to upload document. Please try again.",
@@ -108,57 +133,74 @@ export function ChatInterface() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading || !token) return
-
-    const userMessage: Message = {
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
-    }
-
-    setMessages((prev) => [...prev, userMessage])
-    setInput("")
-    setIsLoading(true)
+    e.preventDefault();
+    if (!input.trim() || !token) return;
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
+      console.log('Submitting message:', input);
+      console.log('Current chat ID:', currentChatId);
+
+      let chatId = currentChatId;
+      
+      // If no current chat, create a new one
+      if (!chatId) {
+        console.log('Creating new chat');
+        const createChatResponse = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: input.slice(0, 50) + (input.length > 50 ? '...' : ''), // Use first 50 chars of message as title
+          }),
+        });
+
+        if (!createChatResponse.ok) {
+          const errorData = await createChatResponse.json();
+          console.error('Failed to create chat:', errorData);
+          toast.error('Failed to create chat');
+          return;
+        }
+
+        const newChat = await createChatResponse.json();
+        console.log('Created new chat:', newChat);
+        chatId = newChat._id;
+        setCurrentChatId(chatId);
+      }
+
+      // Send the message
+      console.log('Sending message to chat:', chatId);
+      const response = await fetch('/api/chat', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          message: userMessage.content,
-          chatId: currentChatId,
+          content: input,
+          role: 'user',
+          chatId,
         }),
-      })
+      });
 
+      console.log('Message response status:', response.status);
       if (!response.ok) {
-        throw new Error("Failed to send message")
+        const errorData = await response.json();
+        console.error('Failed to send message:', errorData);
+        toast.error('Failed to send message');
+        return;
       }
 
-      const data = await response.json()
-      
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.message,
-        sources: data.sources,
-        timestamp: new Date(),
-      }
-
-      setMessages((prev) => [...prev, assistantMessage])
-      setCurrentChatId(data.chatId)
+      const data = await response.json();
+      console.log('Message response data:', data);
+      setMessages(data.messages);
+      setInput('');
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
+      console.error('Error in handleSubmit:', error);
+      toast.error('Failed to send message');
     }
-  }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -240,37 +282,43 @@ export function ChatInterface() {
                 </p>
               </div>
             )}
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
+            {messages.map((message, index) => {
+              // Convert timestamp to Date if it's a string
+              const timestamp = typeof message.timestamp === 'string' 
+                ? new Date(message.timestamp) 
+                : message.timestamp;
+              
+              return (
                 <div
-                  className={`max-w-[80%] rounded-lg p-3 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                  key={`${message.role}-${index}-${timestamp.getTime()}`}
+                  className={`flex flex-col space-y-2 ${
+                    message.role === 'user' ? 'items-end' : 'items-start'
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  {message.sources && message.sources.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-muted-foreground/20">
-                      <p className="text-xs font-medium mb-1">Sources:</p>
-                      {message.sources.map((source, idx) => (
-                        <div key={idx} className="text-xs opacity-70">
-                          {source.metadata.source}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <span className="text-xs opacity-70 block mt-1">
-                    {message.timestamp.toLocaleTimeString()}
-                  </span>
+                  <div
+                    className={`max-w-[80%] rounded-lg p-4 ${
+                      message.role === 'user'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-900'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    {message.sources && message.sources.length > 0 && (
+                      <div className="mt-2 text-sm">
+                        <p className="font-semibold">Sources:</p>
+                        <ul className="list-disc pl-4">
+                          {message.sources.map((source, idx) => (
+                            <li key={`${message.role}-${index}-source-${idx}`}>
+                              {source.title || source.filename}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Input */}

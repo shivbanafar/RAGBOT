@@ -1,0 +1,1 @@
+This is a test document. It has multiple sentences. We want to see how the chunking works with our new dynamic approach. This should create more balanced chunks based on the total size of the document. Let's see if it works better than before. The chunks should be more evenly distributed now.

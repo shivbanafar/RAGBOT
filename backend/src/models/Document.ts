@@ -28,10 +28,11 @@ const chunkSchema = new mongoose.Schema({
   embedding: {
     type: [Number],
     required: true,
-    index: true, // This enables vector search in MongoDB Atlas
+    index: true, // Enable vector search
     validate: {
       validator: function(v: number[]) {
-        return v.length === 128; // Optimized: 128-dimensional embeddings
+        console.log(`Validating embedding dimensions: ${v.length}`);
+        return v.length === 128;
       },
       message: 'Embedding must be 128-dimensional'
     }
@@ -52,6 +53,7 @@ const documentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
+    index: true, // Add index for faster queries
   },
   title: {
     type: String,
@@ -62,14 +64,40 @@ const documentSchema = new mongoose.Schema({
     enum: ['pdf', 'txt', 'md', 'json'],
     required: true,
   },
-  chunks: [chunkSchema],
+  chunks: {
+    type: [chunkSchema],
+    default: [], // Make chunks optional with empty array as default
+  },
 }, {
   timestamps: true,
 });
 
-// Create indexes for better query performance
+// Create compound index for better query performance
 documentSchema.index({ userId: 1, createdAt: -1 });
-// Note: Vector search index requires MongoDB Atlas with vector search enabled
-// documentSchema.index({ 'chunks.embedding': 'vector' });
 
-export const Document = mongoose.models.Document || mongoose.model<IDocument>('Document', documentSchema); 
+// Add pre-save middleware for validation
+documentSchema.pre('save', function(next) {
+  console.log(`Saving document: ${this.title} with ${this.chunks.length} chunks`);
+  // Only validate chunks for new documents or when chunks are being modified
+  if (this.isNew || this.isModified('chunks')) {
+    if (this.chunks.length === 0) {
+      console.error('Document has no chunks');
+      next(new Error('Document must have at least one chunk'));
+      return;
+    }
+  }
+  next();
+});
+
+// Add error handling for save operations
+documentSchema.post('save', function(error: any, doc: any, next: any) {
+  if (error) {
+    console.error('Error saving document:', error);
+    next(error);
+  } else {
+    console.log(`Successfully saved document: ${doc.title}`);
+    next();
+  }
+});
+
+export const Document = mongoose.model<IDocument>('Document', documentSchema); 

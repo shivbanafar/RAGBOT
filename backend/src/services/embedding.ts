@@ -2,6 +2,11 @@
 // Uses TF-IDF inspired approach for document similarity
 // Optimized: 128 dimensions for better performance and memory usage
 
+import axios from 'axios';
+
+const OLLAMA_API = 'http://localhost:11434/api';
+const EMBEDDING_MODEL = 'hf.co/CompendiumLabs/bge-base-en-v1.5-gguf';
+
 // Simple text preprocessing
 function preprocessText(text: string): string {
   return text.toLowerCase()
@@ -47,24 +52,30 @@ function wordVectorToEmbedding(wordVector: Map<string, number>): number[] {
 
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
-    const wordVector = generateWordVector(text);
-    const embedding = wordVectorToEmbedding(wordVector);
-    return embedding;
+    const response = await axios.post(`${OLLAMA_API}/embeddings`, {
+      model: EMBEDDING_MODEL,
+      prompt: text
+    });
+
+    if (!response.data || !response.data.embedding) {
+      throw new Error('Invalid response from Ollama');
+    }
+
+    return response.data.embedding;
   } catch (error) {
     console.error('Embedding generation error:', error);
-    // Return a simple fallback embedding
-    return new Array(128).fill(0); // Reduced from 512 to 128
+    throw error;
   }
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   try {
-    return texts.map(text => {
-      const wordVector = generateWordVector(text);
-      return wordVectorToEmbedding(wordVector);
-    });
+    const embeddings = await Promise.all(
+      texts.map(text => generateEmbedding(text))
+    );
+    return embeddings;
   } catch (error) {
     console.error('Batch embedding generation error:', error);
-    return texts.map(() => new Array(128).fill(0)); // Reduced from 512 to 128
+    throw error;
   }
 } 

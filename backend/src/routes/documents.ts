@@ -4,6 +4,7 @@ import multer from 'multer';
 import { Document } from '../models/Document';
 import { protect } from '../middleware/auth';
 import { generateEmbedding, generateEmbeddings } from '../services/embedding';
+import mongoose from 'mongoose';
 
 const router = express.Router();
 
@@ -12,27 +13,76 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // Increased to 50MB for RAG use case
+    fileSize: 100 * 1024 * 1024, // Increased to 100MB
   },
   fileFilter: (req, file, cb) => {
+    console.log(`Processing file: ${file.originalname}, type: ${file.mimetype}`);
     const allowedTypes = ['application/pdf', 'text/plain', 'text/markdown', 'application/json'];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
+      console.error(`Invalid file type: ${file.mimetype}`);
       cb(new Error('Invalid file type. Only PDF, TXT, MD, and JSON files are allowed.'));
     }
   },
 });
 
+// Check MongoDB connection
+const checkMongoConnection = async () => {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      console.error('MongoDB not connected. Current state:', mongoose.connection.readyState);
+      throw new Error('Database connection not ready');
+    }
+    console.log('MongoDB connection is ready');
+    return true;
+  } catch (error) {
+    console.error('MongoDB connection check failed:', error);
+    return false;
+  }
+};
+
 // Get all documents for a user
 router.get('/', protect, async (req: Request, res: Response): Promise<void> => {
   try {
-    const documents = await Document.find({ userId: req.user?._id })
+    console.log('Fetching documents for user:', req.user?._id);
+    
+    // Check MongoDB connection
+    const isConnected = await checkMongoConnection();
+    if (!isConnected) {
+      console.error('MongoDB connection not ready');
+      res.status(500).json({ error: 'Database connection not ready' });
+      return;
+    }
+
+    if (!req.user?._id) {
+      console.error('No user ID found in request');
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    console.log('Querying documents for user:', req.user._id);
+    const documents = await Document.find({ userId: req.user._id })
       .sort({ createdAt: -1 })
-      .select('title type createdAt');
+      .select('title type createdAt')
+      .lean(); // Use lean() for better performance
+    
+    console.log(`Found ${documents.length} documents for user`);
+    console.log('Documents:', documents.map(doc => ({
+      id: doc._id,
+      title: doc.title,
+      type: doc.type,
+      createdAt: doc.createdAt
+    })));
+    
     res.json(documents);
   } catch (error: any) {
     console.error('Get documents error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: error.message || 'Server error' });
   }
 });
@@ -40,17 +90,30 @@ router.get('/', protect, async (req: Request, res: Response): Promise<void> => {
 // Upload and process a document
 router.post('/upload', protect, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('Starting document upload process');
+    
+    // Check MongoDB connection
+    const isConnected = await checkMongoConnection();
+    if (!isConnected) {
+      console.error('MongoDB connection not ready');
+      res.status(500).json({ error: 'Database connection not ready' });
+      return;
+    }
+
     if (!req.file) {
+      console.error('No file uploaded');
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
 
     const { title } = req.body;
     const file = req.file;
+    console.log(`Processing file: ${file.originalname}, size: ${file.size} bytes, type: ${file.mimetype}`);
     
     // Check file size
-    if (file.size > 50 * 1024 * 1024) {
-      res.status(400).json({ error: 'File too large. Maximum size is 50MB.' });
+    if (file.size > 100 * 1024 * 1024) {
+      console.error(`File too large: ${file.size} bytes`);
+      res.status(400).json({ error: 'File too large. Maximum size is 100MB.' });
       return;
     }
     
@@ -70,24 +133,35 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
         fileType = 'json';
         break;
       default:
+        console.error(`Unsupported file type: ${file.mimetype}`);
         res.status(400).json({ error: 'Unsupported file type' });
         return;
     }
 
+    console.log(`Extracting text from ${fileType} file`);
     // Extract text from file
-    const text = await extractTextFromFile(file.buffer, fileType);
+    let text: string;
+    try {
+      text = await extractTextFromFile(file.buffer, fileType);
+      console.log(`Successfully extracted ${text.length} characters of text`);
+    } catch (error) {
+      console.error('Error extracting text:', error);
+      res.status(500).json({ error: 'Failed to extract text from file' });
+      return;
+    }
     
     // Split text into chunks
     const chunks = splitTextIntoChunks(text);
+    console.log(`Split text into ${chunks.length} chunks`);
     
     if (chunks.length === 0) {
+      console.error('No content could be extracted from the file');
       res.status(400).json({ error: 'No content could be extracted from the file.' });
       return;
     }
     
-    console.log(`Processing ${chunks.length} chunks...`);
-    
-    // Process chunks with selective embedding (only for chunks > 500 chars)
+    console.log('Generating embeddings for chunks');
+    // Process chunks with selective embedding
     const chunksWithEmbeddings: Array<{
       text: string;
       embedding: number[];
@@ -100,11 +174,14 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
     
     for (const chunk of chunks) {
       try {
+        console.log(`Processing chunk of length ${chunk.text.length}`);
         // Only generate embeddings for chunks longer than 500 characters
         let embedding: number[];
         if (chunk.text.length > 500) {
+          console.log('Generating embedding for long chunk');
           embedding = await generateEmbedding(chunk.text);
         } else {
+          console.log('Using hash-based embedding for short chunk');
           // For short chunks, use a simple hash-based embedding
           const hash = chunk.text.split('').reduce((acc, char) => {
             return ((acc << 5) - acc + char.charCodeAt(0)) & 0xffffffff;
@@ -124,6 +201,7 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
             endIndex: chunk.endIndex,
           },
         });
+        console.log('Successfully processed chunk');
       } catch (error) {
         console.error('Error processing chunk:', error);
         // Continue with next chunk
@@ -131,10 +209,12 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
     }
 
     if (chunksWithEmbeddings.length === 0) {
+      console.error('Failed to process any chunks');
       res.status(500).json({ error: 'Failed to process document chunks.' });
       return;
     }
 
+    console.log('Creating document in database');
     // Create document
     const document = new Document({
       userId: req.user?._id,
@@ -144,6 +224,7 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
     });
 
     await document.save();
+    console.log(`Successfully saved document with ${chunksWithEmbeddings.length} chunks`);
 
     res.status(201).json({
       message: 'Document uploaded and processed successfully',
@@ -156,6 +237,11 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
     });
   } catch (error: any) {
     console.error('Document upload error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     res.status(500).json({ error: error.message || 'Server error' });
   }
 });
@@ -196,51 +282,123 @@ router.delete('/clear', protect, async (req: Request, res: Response): Promise<vo
 
 // Helper function to extract text from file
 async function extractTextFromFile(buffer: Buffer, fileType: string): Promise<string> {
-  switch (fileType) {
-    case 'txt':
-    case 'md':
-    case 'json':
-      return buffer.toString('utf-8');
-    case 'pdf':
-      // For now, return a placeholder. In production, you'd use a PDF parsing library
-      return 'PDF content extraction not implemented yet. Please use text files for now.';
-    default:
-      throw new Error('Unsupported file type');
+  console.log(`Extracting text from ${fileType} file`);
+  try {
+    switch (fileType) {
+      case 'txt':
+      case 'md':
+      case 'json':
+        const text = buffer.toString('utf-8');
+        console.log(`Extracted ${text.length} characters from text file`);
+        return text;
+      case 'pdf':
+        // For now, return a placeholder for PDF files
+        console.log('PDF extraction not implemented, returning placeholder text');
+        return 'PDF content extraction is not implemented yet. Please upload a text file instead.';
+      default:
+        console.error(`Unsupported file type: ${fileType}`);
+        throw new Error('Unsupported file type');
+    }
+  } catch (error) {
+    console.error('Error in extractTextFromFile:', error);
+    throw error;
   }
 }
 
 // Helper function to split text into chunks
-function splitTextIntoChunks(text: string, chunkSize: number = 2000, overlap: number = 200): Array<{text: string, startIndex: number, endIndex: number}> {
-  const chunks = [];
-  let startIndex = 0;
+function splitTextIntoChunks(text: string, targetChunks: number = 10, overlap: number = 400): Array<{text: string, startIndex: number, endIndex: number}> {
+  console.log(`Splitting text into approximately ${targetChunks} chunks`);
   
-  while (startIndex < text.length) {
-    let endIndex = Math.min(startIndex + chunkSize, text.length);
-    let chunkText = text.slice(startIndex, endIndex);
+  // Validate input parameters
+  if (targetChunks <= 0) {
+    console.error('Invalid target chunks:', targetChunks);
+    throw new Error('Target chunks must be greater than 0');
+  }
+  
+  const textLength = text.length;
+  console.log(`Total text length: ${textLength} characters`);
+  
+  // For very small texts, return as a single chunk
+  if (textLength < 1000) {
+    console.log('Text is small, returning as single chunk');
+    return [{
+      text: text.trim(),
+      startIndex: 0,
+      endIndex: textLength
+    }];
+  }
+  
+  // Calculate dynamic chunk size based on total length and target chunks
+  const baseChunkSize = Math.ceil(textLength / targetChunks);
+  console.log(`Base chunk size: ${baseChunkSize} characters`);
+  
+  // Set minimum chunk size to prevent too many small chunks
+  const minChunkSize = 500;
+  const effectiveChunkSize = Math.max(baseChunkSize, minChunkSize);
+  console.log(`Effective chunk size: ${effectiveChunkSize} characters`);
+  
+  // Ensure overlap is not too large
+  const safeOverlap = Math.min(overlap, Math.floor(effectiveChunkSize * 0.2)); // Max 20% overlap
+  console.log(`Using overlap of ${safeOverlap} characters`);
+  
+  const chunks = [];
+  let start = 0;
+  let iterationCount = 0;
+  const maxIterations = targetChunks * 2; // Safety limit
+  
+  while (start < textLength && iterationCount < maxIterations) {
+    iterationCount++;
+    let end = Math.min(start + effectiveChunkSize, textLength);
     
-    // Try to break at sentence boundaries
-    if (endIndex < text.length) {
-      const lastPeriod = chunkText.lastIndexOf('.');
-      const lastNewline = chunkText.lastIndexOf('\n');
+    // If we're not at the end, try to find a good breaking point
+    if (end < textLength) {
+      // Look for the last period or newline within the last 200 characters
+      const lastPeriod = text.lastIndexOf('.', end);
+      const lastNewline = text.lastIndexOf('\n', end);
       const breakPoint = Math.max(lastPeriod, lastNewline);
       
-      if (breakPoint > startIndex + chunkSize * 0.7) {
-        chunkText = chunkText.slice(0, breakPoint + 1);
-        endIndex = startIndex + breakPoint + 1;
+      if (breakPoint > start + effectiveChunkSize * 0.7) {
+        end = breakPoint + 1;
       }
     }
     
-    chunks.push({
-      text: chunkText.trim(),
-      startIndex,
-      endIndex,
-    });
+    const chunk = text.slice(start, end).trim();
+    if (chunk) {
+      chunks.push({
+        text: chunk,
+        startIndex: start,
+        endIndex: end
+      });
+      console.log(`Created chunk ${chunks.length} of length ${chunk.length}`);
+    }
     
-    startIndex = endIndex - overlap;
-    if (startIndex >= text.length) break;
+    // Ensure we make progress
+    const newStart = end - safeOverlap;
+    if (newStart <= start) {
+      console.error('No progress in chunking, breaking loop');
+      break;
+    }
+    start = newStart;
   }
   
+  if (iterationCount >= maxIterations) {
+    console.warn('Reached maximum iterations in chunking');
+  }
+  
+  console.log(`Split text into ${chunks.length} chunks`);
   return chunks;
 }
+
+const testDocument = {
+  title: 'Test Document',
+  type: 'txt',
+  chunks: [
+    {
+      text: 'This is a test document for machine learning types and applications.',
+      embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
+      metadata: { source: 'Test Document', startIndex: 0, endIndex: 60 }
+    }
+  ]
+};
 
 export default router; 

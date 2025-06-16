@@ -1,37 +1,68 @@
-# RAG Chatbot
+# RAGBOT - AI-Powered Document Chatbot
 
-A modern RAG-based chatbot application built with Next.js, MongoDB, and Google OAuth authentication.
+RAGBOT is a powerful document-based chatbot that uses Retrieval-Augmented Generation (RAG) to provide accurate and context-aware responses based on your documents. Built with Next.js, Express, and Google's Gemini AI, it offers a modern, user-friendly interface for document management and AI-powered conversations.
 
 ## Features
 
-- 🤖 RAG-based chatbot for intelligent responses
-- 🔐 Google OAuth authentication
-- 💾 MongoDB integration for user data and chat history
-- 🎨 Modern UI with Tailwind CSS and shadcn/ui
-- 📱 Responsive design
-- 🔒 Protected routes and secure authentication
+- 📄 **Document Management**
+  - Upload and manage PDF, TXT, MD, and JSON files
+  - Automatic text extraction and chunking
+  - Vector embeddings for semantic search
+
+- 💬 **AI-Powered Chat**
+  - Context-aware responses using RAG
+  - Real-time message processing
+  - Conversation history management
+  - Source attribution for responses
+
+- 🔐 **Authentication**
+  - Secure user authentication
+  - JWT-based session management
+  - Protected routes and API endpoints
+
+- 🎨 **Modern UI**
+  - Clean and intuitive interface
+  - Real-time updates
+  - Responsive design
+  - Dark mode support
 
 ## Tech Stack
 
-- **Frontend:**
-  - Next.js 14
-  - TypeScript
-  - Tailwind CSS
-  - shadcn/ui
-  - NextAuth.js
+### Frontend
+- Next.js 15 (App Router)
+- TypeScript
+- Tailwind CSS
+- Shadcn UI Components
+- React Query
 
-- **Backend:**
-  - Node.js
-  - Express
-  - MongoDB
-  - Google OAuth
+### Backend
+- Express.js
+- TypeScript
+- MongoDB
+- Google Gemini AI
+- JWT Authentication
 
 ## Prerequisites
 
 - Node.js 18+ and npm
-- MongoDB Atlas account
-- Google Cloud Platform account
-- Git
+- MongoDB instance
+- Google Cloud account with Gemini API access
+
+## Environment Variables
+
+### Frontend (.env.local)
+```env
+NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
+GEMINI_API_KEY=your_gemini_api_key
+```
+
+### Backend (.env)
+```env
+PORT=3001
+MONGODB_URI=your_mongodb_uri
+JWT_SECRET=your_jwt_secret
+GEMINI_API_KEY=your_gemini_api_key
+```
 
 ## Setup Instructions
 
@@ -52,58 +83,22 @@ A modern RAG-based chatbot application built with Next.js, MongoDB, and Google O
    npm install
    ```
 
-3. **Environment Setup**
+3. **Set up environment variables**
+   - Copy `.env.example` to `.env` in both frontend and backend directories
+   - Update the variables with your configuration
 
-   Create `.env.local` in the frontend directory:
-   ```env
-   # NextAuth.js
-   NEXTAUTH_URL=http://localhost:3000
-   NEXTAUTH_SECRET=your-secret-key
-
-   # Google OAuth
-   GOOGLE_CLIENT_ID=your-google-client-id
-   GOOGLE_CLIENT_SECRET=your-google-client-secret
-
-   # MongoDB
-   MONGODB_URI=your-mongodb-connection-string
-   ```
-
-   Create `.env` in the backend directory:
-   ```env
-   PORT=3001
-   MONGODB_URI=your-mongodb-connection-string
-   JWT_SECRET=your-jwt-secret
-   ```
-
-4. **Google OAuth Setup**
-   - Go to [Google Cloud Console](https://console.cloud.google.com)
-   - Create a new project
-   - Enable Google+ API
-   - Create OAuth 2.0 credentials
-   - Add authorized redirect URIs:
-     - `http://localhost:3000/api/auth/callback/google`
-     - `http://localhost:3000/login`
-
-5. **MongoDB Setup**
-   - Create a MongoDB Atlas account
-   - Create a new cluster
-   - Get your connection string
-   - Create a database user
-   - Add your IP to the whitelist
-
-6. **Run the development servers**
-
-   In the frontend directory:
+4. **Start the development servers**
    ```bash
+   # Start backend server
+   cd backend
+   npm run dev
+
+   # Start frontend server (in a new terminal)
+   cd frontend
    npm run dev
    ```
 
-   In the backend directory:
-   ```bash
-   npm run dev
-   ```
-
-   The application will be available at:
+5. **Access the application**
    - Frontend: http://localhost:3000
    - Backend: http://localhost:3001
 
@@ -115,18 +110,38 @@ RAGBOT/
 │   ├── src/
 │   │   ├── app/            # App router pages
 │   │   ├── components/     # React components
-│   │   ├── lib/           # Utility functions
-│   │   └── types/         # TypeScript types
-│   └── public/            # Static files
+│   │   ├── contexts/       # React contexts
+│   │   └── lib/           # Utility functions
+│   └── public/            # Static assets
 │
-└── backend/               # Express backend application
-    ├── src/
-    │   ├── controllers/  # Route controllers
-    │   ├── models/       # MongoDB models
-    │   ├── routes/       # API routes
-    │   └── utils/        # Utility functions
-    └── tests/            # Test files
+├── backend/                # Express.js backend application
+│   ├── src/
+│   │   ├── routes/        # API routes
+│   │   ├── models/        # MongoDB models
+│   │   ├── middleware/    # Express middleware
+│   │   └── services/      # Business logic
+│   └── uploads/           # Document uploads
+│
+└── README.md              # Project documentation
 ```
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - User login
+- `GET /api/auth/me` - Get current user
+
+### Documents
+- `GET /api/documents` - List user's documents
+- `POST /api/documents/upload` - Upload new document
+- `DELETE /api/documents/:id` - Delete document
+
+### Chat
+- `GET /api/chat` - List user's chats
+- `POST /api/chat` - Create new chat
+- `POST /api/chat/message` - Send message
+- `POST /api/chat/:id/process` - Process chat message
 
 ## Contributing
 
@@ -143,6 +158,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - [Next.js](https://nextjs.org/)
+- [Express.js](https://expressjs.com/)
+- [Google Gemini AI](https://ai.google.dev/)
 - [MongoDB](https://www.mongodb.com/)
-- [shadcn/ui](https://ui.shadcn.com/)
-- [NextAuth.js](https://next-auth.js.org/) 
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Shadcn UI](https://ui.shadcn.com/) 
