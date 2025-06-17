@@ -15,11 +15,8 @@ declare module "next-auth" {
       image?: string | null
     }
   }
-  interface User {
+  interface JWT {
     id: string
-    name?: string | null
-    email?: string | null
-    image?: string | null
   }
 }
 
@@ -81,7 +78,7 @@ const handler = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string
+        session.user.id = token.id
       }
       return session
     },
