@@ -1,1 +1,45 @@
-This is a test document. It has multiple sentences. We want to see how the chunking works with our new dynamic approach. This should create more balanced chunks based on the total size of the document. Let's see if it works better than before. The chunks should be more evenly distributed now.
+# Company Policy Manual
+
+## 1. Introduction
+Welcome to Acme Corp! This manual outlines all key HR policies.
+
+---
+
+## 2. General Employment
+- Full‑time employment: 40 hours/week
+- Part‑time: minimum 20 hours/week
+- Probation period: 3 months
+
+---
+
+## 3. Vacation Policy
+
+### 3.1 Entitlement
+- All employees are entitled to **20 days of paid vacation per calendar year**.
+- New hires accrue vacation pro rata—1.67 days per month until 20 days are reached.
+
+### 3.2 Usage Guidelines
+- Vacation days must be taken in **minimum blocks of 5 days**.
+- Requests must be submitted at least **4 weeks in advance**.
+- Approval depends on team bandwidth and manager consent.
+
+### 3.3 Carry‑Over & Expiry
+- Up to **5 days of unused vacation** may be carried over to the next calendar year.
+- Any unused days beyond that are forfeited on **December 31**.
+
+---
+
+## 4. Sick Leave
+- Entitlement: **10 sick days per year**.
+- Requires a doctor's note if sick leave exceeds **3 consecutive days**.
+
+---
+
+## 5. Other Leave
+- Parental leave: up to 12 weeks at 60% pay
+- Jury duty: paid leave
+
+---
+
+## 6. Contact & Questions
+For clarifications, contact HR at **hr@acmecorp.com**.

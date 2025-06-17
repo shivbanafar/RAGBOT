@@ -247,18 +247,36 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
 });
 
 // Delete a document
-router.delete('/:documentId', protect, async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id', protect, async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('Deleting document:', req.params.id);
+    
+    // Check MongoDB connection
+    const isConnected = await checkMongoConnection();
+    if (!isConnected) {
+      console.error('MongoDB connection not ready');
+      res.status(500).json({ error: 'Database connection not ready' });
+      return;
+    }
+
+    if (!req.user?._id) {
+      console.error('No user ID found in request');
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
+
     const document = await Document.findOneAndDelete({
-      _id: req.params.documentId,
-      userId: req.user?._id,
+      _id: req.params.id,
+      userId: req.user._id,
     });
 
     if (!document) {
+      console.error('Document not found:', req.params.id);
       res.status(404).json({ error: 'Document not found' });
       return;
     }
 
+    console.log('Successfully deleted document:', req.params.id);
     res.json({ message: 'Document deleted successfully' });
   } catch (error: any) {
     console.error('Delete document error:', error);

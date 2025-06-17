@@ -52,6 +52,7 @@ function wordVectorToEmbedding(wordVector: Map<string, number>): number[] {
 
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
+    // Try to use Ollama first
     const response = await axios.post(`${OLLAMA_API}/embeddings`, {
       model: EMBEDDING_MODEL,
       prompt: text
@@ -63,8 +64,10 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
     return response.data.embedding;
   } catch (error) {
-    console.error('Embedding generation error:', error);
-    throw error;
+    console.log('Ollama not available, using fallback embedding method');
+    // Fallback to simple TF-IDF inspired embedding
+    const wordVector = generateWordVector(text);
+    return wordVectorToEmbedding(wordVector);
   }
 }
 

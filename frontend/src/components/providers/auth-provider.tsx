@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loading } from '@/components/ui/loading'
+import Cookies from 'js-cookie'
 
 interface User {
   id: string
@@ -37,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!mounted) return
 
-    const storedToken = localStorage.getItem('token')
-    const storedUser = localStorage.getItem('user')
+    const storedToken = Cookies.get('auth_token')
+    const storedUser = Cookies.get('user')
     
     if (storedToken && storedUser) {
       setToken(storedToken)
@@ -68,8 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(data.token)
       setUser(data.user)
       
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      // Store in cookies instead of localStorage
+      Cookies.set('auth_token', data.token, { expires: 7 }) // 7 days expiry
+      Cookies.set('user', JSON.stringify(data.user), { expires: 7 })
       
       router.push('/chat')
     } catch (error) {
@@ -97,8 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(data.token)
       setUser(data.user)
       
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      // Store in cookies instead of localStorage
+      Cookies.set('auth_token', data.token, { expires: 7 }) // 7 days expiry
+      Cookies.set('user', JSON.stringify(data.user), { expires: 7 })
       
       router.push('/chat')
     } catch (error) {
@@ -109,8 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setToken(null)
     setUser(null)
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    Cookies.remove('auth_token')
+    Cookies.remove('user')
     router.push('/login')
   }
 

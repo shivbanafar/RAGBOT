@@ -1,6 +1,13 @@
 import { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 
+interface User {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -8,8 +15,12 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
+  secret: process.env.NEXTAUTH_SECRET,
+  session: {
+    strategy: "jwt",
+  },
   pages: {
-    signIn: "/auth/login",
+    signIn: "/login",
   },
   callbacks: {
     async session({ session, token }) {
@@ -17,6 +28,12 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.sub!
       }
       return session
+    },
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = (user as User).id
+      }
+      return token
     },
   },
 } 

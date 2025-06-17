@@ -199,12 +199,24 @@ router.post('/:id/process', protect, async (req: Request, res: Response) => {
 
     // Generate embedding for the message
     console.log('🔄 Generating embedding for message');
-    const messageEmbedding = await generateEmbedding(message);
+    let messageEmbedding: number[] = [];
+    try {
+      messageEmbedding = await generateEmbedding(message);
+    } catch (error) {
+      console.error('❌ Error generating embedding:', error);
+      // Continue without embeddings
+    }
 
     // Retrieve relevant documents
     console.log('🔍 Retrieving relevant documents');
-    const relevantDocs = await retrieveRelevantDocuments(messageEmbedding, req.user?._id);
-    console.log(`✅ Found ${relevantDocs.length} relevant documents`);
+    let relevantDocs: Document[] = [];
+    try {
+      relevantDocs = await retrieveRelevantDocuments(messageEmbedding, req.user?._id);
+      console.log(`✅ Found ${relevantDocs.length} relevant documents`);
+    } catch (error) {
+      console.error('❌ Error retrieving documents:', error);
+      // Continue without relevant documents
+    }
 
     // Prepare context from relevant documents
     const context = relevantDocs
@@ -234,7 +246,13 @@ Assistant:`;
       await chat.save();
       console.log('✅ Added AI response to chat');
 
-      res.json({ response, relevantDocs });
+      // Return the updated chat with messages
+      const updatedChat = await Chat.findById(chat._id);
+      res.json({ 
+        response, 
+        relevantDocs,
+        messages: updatedChat?.messages || []
+      });
     } catch (error: any) {
       console.error('❌ Error generating AI response:', error);
       // Add a fallback response
@@ -242,9 +260,13 @@ Assistant:`;
       chat.messages.push({ content: fallbackResponse, role: 'assistant' });
       await chat.save();
       console.log('⚠️ Using fallback response');
+      
+      // Return the updated chat with messages
+      const updatedChat = await Chat.findById(chat._id);
       res.json({ 
         response: fallbackResponse, 
         relevantDocs,
+        messages: updatedChat?.messages || [],
         error: 'AI response generation failed, but relevant documents were found'
       });
     }

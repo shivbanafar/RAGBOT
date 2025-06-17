@@ -15,6 +15,9 @@ declare global {
 }
 global.inMemoryUsers = global.inMemoryUsers || new Map();
 
+// JWT secret key from environment variables
+const JWT_SECRET = process.env.JWT_SECRET || 'a-very-strong-and-unique-secret-key-for-ragbot';
+
 export const protect = async (
   req: Request,
   res: Response,
@@ -36,10 +39,7 @@ export const protect = async (
 
     // 2) Verify token
     try {
-      const decoded = jwt.verify(
-        token,
-        'your-super-secret-jwt-key-here'
-      ) as JwtPayload;
+      const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
       console.log('✅ Token verified successfully');
       console.log('👤 User ID from token:', decoded.id);
 

@@ -137,6 +137,7 @@ export function ChatInterface() {
     if (!input.trim() || !token) return;
 
     try {
+      setIsLoading(true);
       console.log('Submitting message:', input);
       console.log('Current chat ID:', currentChatId);
 
@@ -159,7 +160,11 @@ export function ChatInterface() {
         if (!createChatResponse.ok) {
           const errorData = await createChatResponse.json();
           console.error('Failed to create chat:', errorData);
-          toast.error('Failed to create chat');
+          toast({
+            title: "Error",
+            description: "Failed to create chat",
+            variant: "destructive"
+          });
           return;
         }
 
@@ -168,6 +173,14 @@ export function ChatInterface() {
         chatId = newChat._id;
         setCurrentChatId(chatId);
       }
+
+      // Add user message to UI immediately
+      const userMessage: Message = {
+        content: input,
+        role: 'user',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, userMessage]);
 
       // Send the message
       console.log('Sending message to chat:', chatId);
@@ -188,17 +201,53 @@ export function ChatInterface() {
       if (!response.ok) {
         const errorData = await response.json();
         console.error('Failed to send message:', errorData);
-        toast.error('Failed to send message');
+        toast({
+          title: "Error",
+          description: "Failed to send message",
+          variant: "destructive"
+        });
         return;
       }
 
       const data = await response.json();
       console.log('Message response data:', data);
-      setMessages(data.messages);
+
+      // Update messages with the full chat history
+      if (data.messages) {
+        setMessages(data.messages.map((msg: any) => ({
+          content: msg.content,
+          role: msg.role,
+          timestamp: new Date(msg.timestamp || Date.now()),
+          sources: msg.sources
+        })));
+      } else if (data.response) {
+        // If we only got a response (old format), add it to existing messages
+        const aiMessage: Message = {
+          content: data.response,
+          role: 'assistant',
+          timestamp: new Date(),
+          sources: data.relevantDocs?.map((doc: any) => ({
+            text: doc.content,
+            metadata: {
+              source: doc.title,
+              page: doc.page,
+              chunkId: doc.chunkId
+            }
+          }))
+        };
+        setMessages(prev => [...prev, aiMessage]);
+      }
+
       setInput('');
     } catch (error) {
       console.error('Error in handleSubmit:', error);
-      toast.error('Failed to send message');
+      toast({
+        title: "Error",
+        description: "Failed to send message",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -275,22 +324,24 @@ export function ChatInterface() {
         <Card className="flex-1 overflow-hidden flex flex-col">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && (
+            {(!messages || messages.length === 0) && (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">
                   Start a conversation by typing a message below.
                 </p>
               </div>
             )}
-            {messages.map((message, index) => {
+            {messages?.map((message, index) => {
               // Convert timestamp to Date if it's a string
               const timestamp = typeof message.timestamp === 'string' 
                 ? new Date(message.timestamp) 
                 : message.timestamp;
               
+              const messageKey = `message-${index}-${timestamp.getTime()}`;
+              
               return (
                 <div
-                  key={`${message.role}-${index}-${timestamp.getTime()}`}
+                  key={messageKey}
                   className={`flex flex-col space-y-2 ${
                     message.role === 'user' ? 'items-end' : 'items-start'
                   }`}
@@ -308,8 +359,9 @@ export function ChatInterface() {
                         <p className="font-semibold">Sources:</p>
                         <ul className="list-disc pl-4">
                           {message.sources.map((source, idx) => (
-                            <li key={`${message.role}-${index}-source-${idx}`}>
-                              {source.title || source.filename}
+                            <li key={`${messageKey}-source-${idx}`}>
+                              {source.metadata.source}
+                              {source.metadata.page && ` (Page ${source.metadata.page})`}
                             </li>
                           ))}
                         </ul>

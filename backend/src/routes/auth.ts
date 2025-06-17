@@ -8,7 +8,7 @@ import { ValidationError, AuthenticationError } from '../utils/error';
 const router = express.Router();
 
 // JWT secret key - should be in environment variables in production
-const JWT_SECRET = 'your-super-secret-jwt-key-here';
+const JWT_SECRET = process.env.JWT_SECRET || 'a-very-strong-and-unique-secret-key-for-ragbot';
 
 // In-memory user storage for testing (fallback when MongoDB is not available)
 declare global {
