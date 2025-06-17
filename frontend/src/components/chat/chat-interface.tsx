@@ -1,12 +1,13 @@
 "use client"
 
+import { useSession } from 'next-auth/react'
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
-import { useAuth } from "@/components/providers/auth-provider"
 import { Upload, File, X, Send } from "lucide-react"
+import axios from 'axios'
 
 interface Message {
   role: "user" | "assistant"
@@ -29,7 +30,8 @@ interface Document {
   createdAt: string
 }
 
-export function ChatInterface() {
+export default function ChatInterface() {
+  const { data: session, status } = useSession()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -38,15 +40,14 @@ export function ChatInterface() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
-  const { token, user } = useAuth()
   const [error, setError] = useState<string | null>(null)
 
   // Load documents on component mount
   useEffect(() => {
-    if (token) {
+    if (session) {
       loadDocuments()
     }
-  }, [token])
+  }, [session])
 
   const loadDocuments = async () => {
     try {
@@ -85,9 +86,6 @@ export function ChatInterface() {
       console.log('Sending upload request to /api/documents/upload');
       const response = await fetch("/api/documents/upload", {
         method: "POST",
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
         body: formData,
       })
 
@@ -127,7 +125,7 @@ export function ChatInterface() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !token) return;
+    if (!input.trim() || !session) return;
 
     try {
       setIsLoading(true);
@@ -143,10 +141,9 @@ export function ChatInterface() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
-            title: input.slice(0, 50) + (input.length > 50 ? '...' : ''), // Use first 50 chars of message as title
+            title: input.slice(0, 50) + (input.length > 50 ? '...' : ''),
           }),
         });
 
@@ -181,7 +178,6 @@ export function ChatInterface() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           content: input,
@@ -251,7 +247,7 @@ export function ChatInterface() {
     }
   }
 
-  if (!user) {
+  if (!session) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">

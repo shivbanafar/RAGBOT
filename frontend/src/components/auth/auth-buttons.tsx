@@ -1,44 +1,25 @@
 "use client"
 
-import { useAuth } from "@/components/providers/auth-provider"
+import { useSession, signIn, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
 
 export function AuthButtons() {
-  const { user, logout, loading } = useAuth()
+  const { data: session, status } = useSession()
 
-  if (loading) {
+  if (status === "loading") {
     return <Button variant="ghost" disabled>Loading...</Button>
   }
 
-  if (user) {
+  if (status === "authenticated") {
     return (
-      <div className="flex items-center gap-4">
-        <span className="text-sm text-muted-foreground">
-          {user.email}
-        </span>
-        <Button
-          variant="ghost"
-          onClick={logout}
-        >
-          Logout
-        </Button>
+      <div className="flex items-center space-x-2">
+        <span className="text-sm">{session.user?.name || session.user?.email}</span>
+        <Button variant="outline" onClick={() => signOut()}>Logout</Button>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <Link href="/login">
-        <Button variant="ghost">
-          Login
-        </Button>
-      </Link>
-      <Link href="/register">
-        <Button variant="outline">
-          Register
-        </Button>
-      </Link>
-    </div>
+    <Button variant="outline" onClick={() => signIn()}>Login</Button>
   )
 } 

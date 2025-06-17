@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { useAuth } from "@/components/providers/auth-provider"
+import { signIn } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,25 +14,27 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const { login } = useAuth()
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
   const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
+    setError(null)
     try {
-      await login(email, password)
-      toast({
-        title: "Success",
-        description: "Logged in successfully!",
+      const res = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
       })
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Login failed",
-        variant: "destructive",
-      })
+      if (res?.error) {
+        setError("Invalid email or password")
+      } else {
+        router.push("/chat")
+      }
+    } catch (err) {
+      setError("Login failed")
     } finally {
       setIsLoading(false)
     }
@@ -48,6 +51,7 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && <div className="text-red-500 mb-4">{error}</div>}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -73,6 +77,13 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "Logging in..." : "Login"}
             </Button>
+            <button
+              type="button"
+              className="w-full mt-4 bg-red-500 text-white py-2 rounded hover:bg-red-600"
+              onClick={() => signIn("google")}
+            >
+              Sign in with Google
+            </button>
           </form>
           <div className="mt-4 text-center text-sm">
             Don't have an account?{" "}
