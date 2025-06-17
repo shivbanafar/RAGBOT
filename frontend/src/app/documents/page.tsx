@@ -8,6 +8,8 @@ import { useAuth } from "@/components/providers/auth-provider"
 import { Upload, File, Trash2, FolderPlus, Folder, ChevronLeft } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 
 interface Document {
   _id: string
@@ -15,9 +17,12 @@ interface Document {
   type: string
   createdAt: string
   folder: string
+  size: number
 }
 
 export default function DocumentsPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
   const [documents, setDocuments] = useState<Document[]>([])
   const [folders, setFolders] = useState<string[]>([])
   const [currentFolder, setCurrentFolder] = useState('root')
@@ -28,155 +33,100 @@ export default function DocumentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
   const { token, user } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Load documents on component mount and when folder changes
   useEffect(() => {
-    if (token) {
-      console.log('Loading documents for folder:', currentFolder);
-      loadDocuments();
+    if (status === 'unauthenticated') {
+      router.push('/login')
     }
-  }, [token, currentFolder]);
+  }, [status, router])
 
-  const loadDocuments = async () => {
-    try {
-      console.log('Fetching documents list');
-      const response = await fetch('/api/documents', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      console.log('Documents response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Documents loaded:', {
-          documentCount: data.documents.length,
-          documents: data.documents
-        });
-        setDocuments(data.documents);
-      } else {
-        const errorData = await response.json();
-        console.error('Failed to load documents:', errorData);
-        toast({
-          title: "Error",
-          description: "Failed to load documents",
-          variant: "destructive"
-        });
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        const response = await fetch('/api/documents')
+        if (!response.ok) {
+          throw new Error('Failed to fetch documents')
+        }
+        const data = await response.json()
+        setDocuments(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error("Failed to load documents:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load documents",
-        variant: "destructive"
-      });
     }
-  };
+
+    if (status === 'authenticated') {
+      fetchDocuments()
+    }
+  }, [status])
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      console.log('No file selected');
-      return;
-    }
+    const file = event.target.files?.[0]
+    if (!file) return
 
-    console.log('Starting file upload:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type
-    });
-
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("title", file.name);
+    const formData = new FormData()
+    formData.append('file', file)
 
     try {
-      console.log('Sending upload request to /api/documents/upload');
-      const response = await fetch("/api/documents/upload", {
-        method: "POST",
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const response = await fetch('/api/documents/upload', {
+        method: 'POST',
         body: formData,
-      });
+      })
 
-      console.log('Upload response status:', response.status);
-      
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Upload failed:', errorData);
-        throw new Error(errorData.error || "Failed to upload document");
+        throw new Error('Upload failed')
       }
 
-      const data = await response.json();
-      console.log('Upload successful:', {
-        document: data.document
-      });
-      
-      toast({
-        title: "Success",
-        description: `Document "${data.document.title}" uploaded successfully!`,
-      });
-
-      // Reload documents list
-      console.log('Reloading documents list after upload');
-      await loadDocuments();
-    } catch (error) {
-      console.error('Error in handleFileUpload:', error);
-      toast({
-        title: "Error",
-        description: "Failed to upload document. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      const newDoc = await response.json()
+      setDocuments(prev => [...prev, newDoc])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
     }
-  };
+  }
 
   const handleDelete = async (documentId: string) => {
     if (!confirm('Are you sure you want to delete this document?')) {
-      return;
+      return
     }
 
-    setIsDeleting(documentId);
+    setIsDeleting(documentId)
     try {
-      console.log('Deleting document:', documentId);
+      console.log('Deleting document:', documentId)
       const response = await fetch(`/api/documents/${documentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
-      });
+      })
 
-      console.log('Delete response status:', response.status);
+      console.log('Delete response status:', response.status)
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Delete failed:', errorData);
-        throw new Error(errorData.error || 'Failed to delete document');
+        const errorData = await response.json()
+        console.error('Delete failed:', errorData)
+        throw new Error(errorData.error || 'Failed to delete document')
       }
 
       toast({
         title: "Success",
         description: "Document deleted successfully!",
-      });
+      })
 
       // Reload documents list
-      await loadDocuments();
+      await fetchDocuments()
     } catch (error) {
-      console.error('Error deleting document:', error);
+      console.error('Error deleting document:', error)
       toast({
         title: "Error",
         description: "Failed to delete document. Please try again.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsDeleting(null);
+      setIsDeleting(null)
     }
-  };
+  }
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
@@ -184,11 +134,11 @@ export default function DocumentsPage() {
         title: "Error",
         description: "Folder name cannot be empty",
         variant: "destructive"
-      });
-      return;
+      })
+      return
     }
 
-    setIsCreatingFolder(true);
+    setIsCreatingFolder(true)
     try {
       const response = await fetch('/api/documents', {
         method: 'POST',
@@ -197,31 +147,31 @@ export default function DocumentsPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ folderName: newFolderName.trim() }),
-      });
+      })
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create folder');
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to create folder')
       }
 
       toast({
         title: "Success",
         description: "Folder created successfully!",
-      });
+      })
 
-      setNewFolderName('');
-      await loadDocuments();
+      setNewFolderName('')
+      await fetchDocuments()
     } catch (error) {
-      console.error('Error creating folder:', error);
+      console.error('Error creating folder:', error)
       toast({
         title: "Error",
         description: "Failed to create folder. Please try again.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsCreatingFolder(false);
+      setIsCreatingFolder(false)
     }
-  };
+  }
 
   const handleMoveDocument = async (documentId: string, targetFolder: string) => {
     try {
@@ -232,33 +182,41 @@ export default function DocumentsPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ folder: targetFolder }),
-      });
+      })
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to move document');
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to move document')
       }
 
       toast({
         title: "Success",
         description: "Document moved successfully!",
-      });
+      })
 
-      await loadDocuments();
+      await fetchDocuments()
     } catch (error) {
-      console.error('Error moving document:', error);
+      console.error('Error moving document:', error)
       toast({
         title: "Error",
         description: "Failed to move document. Please try again.",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   const handleFolderClick = (folder: string) => {
-    console.log('Changing to folder:', folder);
-    setCurrentFolder(folder);
-  };
+    console.log('Changing to folder:', folder)
+    setCurrentFolder(folder)
+  }
+
+  if (status === 'loading' || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-xl">Loading...</div>
+      </div>
+    )
+  }
 
   if (!user) {
     return (
@@ -272,66 +230,50 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-4">Documents</h1>
         <div className="flex items-center space-x-4">
-          <h1 className="text-3xl font-bold">Documents</h1>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            {isUploading ? "Uploading..." : "Upload Document"}
-          </Button>
+          <label className="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+            Upload Document
+            <input
+              type="file"
+              className="hidden"
+              onChange={handleFileUpload}
+              accept=".pdf,.doc,.docx,.txt"
+            />
+          </label>
         </div>
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".txt,.md,.json,.pdf"
-        onChange={handleFileUpload}
-        className="hidden"
-      />
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
 
-      {/* Documents */}
-      <div className="grid gap-4">
-        {documents.map((doc) => (
-          <Card key={doc._id} className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <File className="h-8 w-8 text-muted-foreground" />
-                <div>
-                  <h3 className="font-medium">{doc.title}</h3>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {doc.type} • {new Date(doc.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(doc._id)}
-                  disabled={isDeleting === doc._id}
-                >
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
-              </div>
+      {documents.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-gray-600">No documents found. Upload a document to get started!</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {documents.map((doc) => (
+            <div
+              key={doc._id}
+              className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+            >
+              <h3 className="text-lg font-semibold">{doc.title}</h3>
+              <p className="text-sm text-gray-500">
+                Uploaded on {new Date(doc.createdAt).toLocaleDateString()}
+              </p>
+              <p className="text-sm text-gray-500">
+                Size: {(doc.size / 1024).toFixed(2)} KB
+              </p>
             </div>
-          </Card>
-        ))}
-        {documents.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">
-              No documents found. Upload a document to get started!
-            </p>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 } 
