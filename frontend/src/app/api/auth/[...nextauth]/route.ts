@@ -15,6 +15,12 @@ declare module "next-auth" {
       image?: string | null
     }
   }
+  interface User {
+    id: string
+    name?: string | null
+    email?: string | null
+    image?: string | null
+  }
 }
 
 const handler = NextAuth({
@@ -50,7 +56,12 @@ const handler = NextAuth({
           throw new Error('Invalid credentials');
         }
 
-        return user;
+        return {
+          id: user._id.toString(),
+          name: user.name,
+          email: user.email,
+          image: user.image
+        };
       }
     })
   ],
