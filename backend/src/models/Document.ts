@@ -15,6 +15,7 @@ export interface IDocument extends mongoose.Document {
   userId: mongoose.Types.ObjectId;
   title: string;
   type: 'pdf' | 'txt' | 'md' | 'json';
+  folder: string;
   chunks: IChunk[];
   createdAt: Date;
   updatedAt: Date;
@@ -64,6 +65,10 @@ const documentSchema = new mongoose.Schema({
     enum: ['pdf', 'txt', 'md', 'json'],
     required: true,
   },
+  folder: {
+    type: String,
+    default: 'root',
+  },
   chunks: {
     type: [chunkSchema],
     default: [], // Make chunks optional with empty array as default
@@ -99,5 +104,8 @@ documentSchema.post('save', function(error: any, doc: any, next: any) {
     next();
   }
 });
+
+// Add index for faster folder queries
+documentSchema.index({ userId: 1, folder: 1 });
 
 export const Document = mongoose.model<IDocument>('Document', documentSchema); 

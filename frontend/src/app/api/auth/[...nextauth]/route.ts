@@ -20,9 +20,9 @@ const handler = NextAuth({
     error: "/login", // Redirect to login page on error
   },
   callbacks: {
-    async session({ session, user }) {
+    async session({ session, token }) {
       if (session.user) {
-        session.user.id = user.id
+        session.user.id = token.sub as string
       }
       return session
     },

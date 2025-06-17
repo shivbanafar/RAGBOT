@@ -39,6 +39,7 @@ export function ChatInterface() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
   const { token, user } = useAuth()
+  const [error, setError] = useState<string | null>(null)
 
   // Load documents on component mount
   useEffect(() => {
@@ -49,26 +50,18 @@ export function ChatInterface() {
 
   const loadDocuments = async () => {
     try {
-      console.log('Fetching documents list');
-      const response = await fetch("/api/documents", {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
-      console.log('Documents response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Documents loaded:', data);
-        setDocuments(data)
-      } else {
-        const errorData = await response.json();
-        console.error('Failed to load documents:', errorData);
+      const response = await fetch('/api/documents');
+      if (!response.ok) {
+        throw new Error('Failed to fetch documents');
       }
+      const data = await response.json();
+      // Update to handle the new response format
+      setDocuments(data.documents || []);
     } catch (error) {
-      console.error("Failed to load documents:", error)
+      console.error('Error loading documents:', error);
+      setError('Failed to load documents');
     }
-  }
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]

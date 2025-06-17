@@ -127,7 +127,7 @@ async function startServer() {
     console.log('Connecting to MongoDB...');
     console.log('MongoDB URI:', MONGODB_URI ? '***' : 'not set');
     
-    await mongoose.connect(MONGODB_URI, {
+    await mongoose.connect(MONGODB_URI as string, {
       maxPoolSize: 5, // Limit connection pool to reduce memory usage
       minPoolSize: 1,
       maxIdleTimeMS: 30000, // Close idle connections after 30 seconds

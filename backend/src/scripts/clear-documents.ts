@@ -39,7 +39,7 @@ async function clearOldDocuments() {
       }
       
       if (hasWrongEmbeddings) {
-        console.log(`Clearing document: ${doc.title} (has ${chunk.embedding?.length || 0}-dimensional embeddings)`);
+        console.log(`Clearing document: ${doc.title} (has ${doc.chunks[0]?.embedding?.length || 0}-dimensional embeddings)`);
         await Document.findByIdAndDelete(doc._id);
         clearedCount++;
       }

@@ -1,7 +1,8 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import { Chat } from '../models/Chat';
-import { Document } from '../models/Document';
+import { Document, IDocument } from '../models/Document';
+import { Document as MongoDocument } from 'mongoose';
 import { protect } from '../middleware/auth';
 import { generateEmbedding } from '../services/embedding';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -209,7 +210,7 @@ router.post('/:id/process', protect, async (req: Request, res: Response) => {
 
     // Retrieve relevant documents
     console.log('🔍 Retrieving relevant documents');
-    let relevantDocs: Document[] = [];
+    let relevantDocs: MongoDocument[] = [];
     try {
       relevantDocs = await retrieveRelevantDocuments(messageEmbedding, req.user?._id);
       console.log(`✅ Found ${relevantDocs.length} relevant documents`);
@@ -219,8 +220,8 @@ router.post('/:id/process', protect, async (req: Request, res: Response) => {
     }
 
     // Prepare context from relevant documents
-    const context = relevantDocs
-      .map(doc => doc.chunks.map(chunk => chunk.text).join('\n'))
+    const context = (relevantDocs as IDocument[])
+      .map(doc => doc.chunks.map((chunk: { text: string }) => chunk.text).join('\n'))
       .join('\n\n');
 
     // Generate AI response
@@ -315,7 +316,7 @@ async function retrieveRelevantDocuments(queryEmbedding: number[], userId: strin
     }
 
     // Get all documents for the user
-    const documents = await Document.find({ userId });
+    const documents = await Document.find({ userId }).lean() as IDocument[];
     console.log(`Found ${documents.length} total documents`);
 
     // Calculate similarity scores for each document

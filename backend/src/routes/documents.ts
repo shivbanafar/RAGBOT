@@ -5,6 +5,7 @@ import { Document } from '../models/Document';
 import { protect } from '../middleware/auth';
 import { generateEmbedding, generateEmbeddings } from '../services/embedding';
 import mongoose from 'mongoose';
+import pdfParse from 'pdf-parse';
 
 const router = express.Router();
 
@@ -61,21 +62,53 @@ router.get('/', protect, async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    console.log('Querying documents for user:', req.user._id);
-    const documents = await Document.find({ userId: req.user._id })
+    // Get folder from query parameter, default to 'root'
+    const folder = req.query.folder as string || 'root';
+    console.log('Fetching documents from folder:', folder);
+
+    // Log the query parameters
+    const query = { 
+      userId: req.user._id,
+      folder: folder,
+      title: { $ne: '.folder' }
+    };
+    console.log('MongoDB query:', JSON.stringify(query, null, 2));
+
+    // First, let's check if there are any documents at all for this user
+    const totalDocs = await Document.countDocuments({ userId: req.user._id });
+    console.log(`Total documents for user: ${totalDocs}`);
+
+    // Get documents in the specified folder
+    const documents = await Document.find(query)
       .sort({ createdAt: -1 })
-      .select('title type createdAt')
-      .lean(); // Use lean() for better performance
+      .select('_id title type createdAt folder')
+      .lean();
     
-    console.log(`Found ${documents.length} documents for user`);
-    console.log('Documents:', documents.map(doc => ({
-      id: doc._id,
-      title: doc.title,
-      type: doc.type,
-      createdAt: doc.createdAt
+    // Get all unique folders for this user
+    const folders = await Document.distinct('folder', { 
+      userId: req.user._id,
+      title: { $ne: '.folder' }
+    });
+    
+    console.log(`Found ${documents.length} documents in folder ${folder}:`, documents.map(d => ({
+      id: d._id,
+      title: d.title,
+      type: d.type,
+      folder: d.folder
     })));
+    console.log('Available folders:', folders);
     
-    res.json(documents);
+    // Let's also check one document to see its structure
+    if (documents.length > 0) {
+      const sampleDoc = await Document.findOne({ userId: req.user._id }).lean();
+      console.log('Sample document structure:', JSON.stringify(sampleDoc, null, 2));
+    }
+    
+    res.json({
+      documents,
+      folders,
+      currentFolder: folder
+    });
   } catch (error: any) {
     console.error('Get documents error:', error);
     console.error('Error details:', {
@@ -106,9 +139,9 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
       return;
     }
 
-    const { title } = req.body;
+    const { title, folder = 'root' } = req.body;
     const file = req.file;
-    console.log(`Processing file: ${file.originalname}, size: ${file.size} bytes, type: ${file.mimetype}`);
+    console.log(`Processing file: ${file.originalname}, size: ${file.size} bytes, type: ${file.mimetype}, folder: ${folder}`);
     
     // Check file size
     if (file.size > 100 * 1024 * 1024) {
@@ -180,12 +213,23 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
         if (chunk.text.length > 500) {
           console.log('Generating embedding for long chunk');
           embedding = await generateEmbedding(chunk.text);
+          // Ensure embedding is 128-dimensional
+          if (embedding.length !== 128) {
+            console.log(`Fixing embedding dimension from ${embedding.length} to 128`);
+            if (embedding.length > 128) {
+              embedding = embedding.slice(0, 128);
+            } else {
+              const padding = new Array(128 - embedding.length).fill(0);
+              embedding = [...embedding, ...padding];
+            }
+          }
         } else {
           console.log('Using hash-based embedding for short chunk');
           // For short chunks, use a simple hash-based embedding
           const hash = chunk.text.split('').reduce((acc, char) => {
             return ((acc << 5) - acc + char.charCodeAt(0)) & 0xffffffff;
           }, 0);
+          // Create a 128-dimensional vector
           embedding = new Array(128).fill(0);
           for (let i = 0; i < 128; i++) {
             embedding[i] = Math.sin(hash + i) * 0.01;
@@ -201,7 +245,7 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
             endIndex: chunk.endIndex,
           },
         });
-        console.log('Successfully processed chunk');
+        console.log('Successfully processed chunk with embedding dimension:', embedding.length);
       } catch (error) {
         console.error('Error processing chunk:', error);
         // Continue with next chunk
@@ -220,11 +264,12 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
       userId: req.user?._id,
       title: title || file.originalname,
       type: fileType,
+      folder: folder,
       chunks: chunksWithEmbeddings,
     });
 
     await document.save();
-    console.log(`Successfully saved document with ${chunksWithEmbeddings.length} chunks`);
+    console.log(`Successfully saved document with ${chunksWithEmbeddings.length} chunks in folder ${folder}`);
 
     res.status(201).json({
       message: 'Document uploaded and processed successfully',
@@ -232,6 +277,7 @@ router.post('/upload', protect, upload.single('file'), async (req: Request, res:
         id: document._id,
         title: document.title,
         type: document.type,
+        folder: document.folder,
         chunksCount: document.chunks.length,
       },
     });
@@ -298,28 +344,149 @@ router.delete('/clear', protect, async (req: Request, res: Response): Promise<vo
   }
 });
 
+// Create a new folder
+router.post('/folders', protect, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { folderName } = req.body;
+    
+    if (!folderName) {
+      res.status(400).json({ error: 'Folder name is required' });
+      return;
+    }
+
+    // Check if folder already exists for this user
+    const existingFolder = await Document.findOne({
+      userId: req.user?._id,
+      folder: folderName
+    });
+
+    if (existingFolder) {
+      res.status(400).json({ error: 'Folder already exists' });
+      return;
+    }
+
+    // Create a placeholder document to establish the folder
+    const document = new Document({
+      userId: req.user?._id,
+      title: '.folder',
+      type: 'txt',
+      folder: folderName,
+      chunks: [{
+        text: 'This is a folder placeholder document.',
+        embedding: new Array(128).fill(0),
+        metadata: {
+          source: '.folder',
+          startIndex: 0,
+          endIndex: 0
+        }
+      }]
+    });
+
+    await document.save();
+    
+    res.status(201).json({
+      message: 'Folder created successfully',
+      folder: folderName
+    });
+  } catch (error: any) {
+    console.error('Create folder error:', error);
+    res.status(500).json({ error: error.message || 'Server error' });
+  }
+});
+
+// Move document to a different folder
+router.patch('/:id/move', protect, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { folder } = req.body;
+
+    if (!folder) {
+      res.status(400).json({ error: 'Target folder is required' });
+      return;
+    }
+
+    const document = await Document.findOneAndUpdate(
+      { _id: id, userId: req.user?._id },
+      { folder },
+      { new: true }
+    );
+
+    if (!document) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    res.json({
+      message: 'Document moved successfully',
+      document: {
+        id: document._id,
+        title: document.title,
+        folder: document.folder
+      }
+    });
+  } catch (error: any) {
+    console.error('Move document error:', error);
+    res.status(500).json({ error: error.message || 'Server error' });
+  }
+});
+
 // Helper function to extract text from file
 async function extractTextFromFile(buffer: Buffer, fileType: string): Promise<string> {
   console.log(`Extracting text from ${fileType} file`);
   try {
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Empty file buffer provided');
+    }
+
     switch (fileType) {
       case 'txt':
       case 'md':
       case 'json':
         const text = buffer.toString('utf-8');
+        if (!text || text.trim().length === 0) {
+          throw new Error('File appears to be empty or contains no readable text');
+        }
         console.log(`Extracted ${text.length} characters from text file`);
         return text;
+
       case 'pdf':
-        // For now, return a placeholder for PDF files
-        console.log('PDF extraction not implemented, returning placeholder text');
-        return 'PDF content extraction is not implemented yet. Please upload a text file instead.';
+        try {
+          console.log('Starting PDF extraction...');
+          const pdfData = await pdfParse(buffer, {
+            max: 0, // No page limit
+            version: 'v2.0.550'
+          });
+          
+          if (!pdfData || !pdfData.text) {
+            throw new Error('PDF parsing failed to extract any text');
+          }
+
+          const extractedText = pdfData.text.trim();
+          if (extractedText.length === 0) {
+            throw new Error('No text content could be extracted from the PDF. The file might be scanned or image-based.');
+          }
+
+          console.log(`Successfully extracted ${extractedText.length} characters from PDF`);
+          console.log(`PDF has ${pdfData.numpages} pages`);
+          return extractedText;
+        } catch (pdfError) {
+          console.error('Error extracting text from PDF:', pdfError);
+          if (pdfError instanceof Error) {
+            throw new Error(`PDF extraction failed: ${pdfError.message}`);
+          }
+          throw new Error('Failed to extract text from PDF file. Please ensure it is a valid PDF with extractable text.');
+        }
+
       default:
         console.error(`Unsupported file type: ${fileType}`);
-        throw new Error('Unsupported file type');
+        throw new Error(`Unsupported file type: ${fileType}`);
     }
   } catch (error) {
     console.error('Error in extractTextFromFile:', error);
-    throw error;
+    if (error instanceof Error) {
+      throw new Error(`Text extraction failed: ${error.message}`);
+    }
+    throw new Error('Failed to extract text from file');
   }
 }
 
