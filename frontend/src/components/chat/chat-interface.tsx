@@ -1,12 +1,7 @@
 "use client"
 
 import { useSession } from 'next-auth/react'
-import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card } from "@/components/ui/card"
-import { useToast } from "@/components/ui/use-toast"
-import { Upload, File, X, Send } from "lucide-react"
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 
 interface Message {
@@ -39,10 +34,8 @@ export default function ChatInterface() {
   const [isUploading, setIsUploading] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { toast } = useToast()
   const [error, setError] = useState<string | null>(null)
 
-  // Load documents on component mount
   useEffect(() => {
     if (session) {
       loadDocuments()
@@ -51,31 +44,21 @@ export default function ChatInterface() {
 
   const loadDocuments = async () => {
     try {
-      const response = await fetch('/api/documents');
+      const response = await fetch('/api/documents')
       if (!response.ok) {
-        throw new Error('Failed to fetch documents');
+        throw new Error('Failed to fetch documents')
       }
-      const data = await response.json();
-      // Update to handle the new response format
-      setDocuments(data.documents || []);
+      const data = await response.json()
+      setDocuments(data.documents || [])
     } catch (error) {
-      console.error('Error loading documents:', error);
-      setError('Failed to load documents');
+      console.error('Error loading documents:', error)
+      setError('Failed to load documents')
     }
-  };
+  }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) {
-      console.log('No file selected');
-      return;
-    }
-
-    console.log('Starting file upload:', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type
-    });
+    if (!file) return
 
     setIsUploading(true)
     const formData = new FormData()
@@ -83,38 +66,21 @@ export default function ChatInterface() {
     formData.append("title", file.name)
 
     try {
-      console.log('Sending upload request to /api/documents/upload');
       const response = await fetch("/api/documents/upload", {
         method: "POST",
         body: formData,
       })
 
-      console.log('Upload response status:', response.status);
-      
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Upload failed:', errorData);
+        const errorData = await response.json()
         throw new Error(errorData.error || "Failed to upload document")
       }
 
       const data = await response.json()
-      console.log('Upload successful:', data);
-      
-      toast({
-        title: "Success",
-        description: `Document "${data.document.title}" uploaded successfully!`,
-      })
-
-      // Reload documents list
-      console.log('Reloading documents list');
       await loadDocuments()
     } catch (error) {
-      console.error('Error in handleFileUpload:', error);
-      toast({
-        title: "Error",
-        description: "Failed to upload document. Please try again.",
-        variant: "destructive",
-      })
+      console.error('Error in handleFileUpload:', error)
+      setError('Failed to upload document')
     } finally {
       setIsUploading(false)
       if (fileInputRef.current) {
@@ -124,19 +90,14 @@ export default function ChatInterface() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !session) return;
+    e.preventDefault()
+    if (!input.trim() || !session) return
 
     try {
-      setIsLoading(true);
-      console.log('Submitting message:', input);
-      console.log('Current chat ID:', currentChatId);
+      setIsLoading(true)
+      let chatId = currentChatId
 
-      let chatId = currentChatId;
-      
-      // If no current chat, create a new one
       if (!chatId) {
-        console.log('Creating new chat');
         const createChatResponse = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -145,35 +106,24 @@ export default function ChatInterface() {
           body: JSON.stringify({
             title: input.slice(0, 50) + (input.length > 50 ? '...' : ''),
           }),
-        });
+        })
 
         if (!createChatResponse.ok) {
-          const errorData = await createChatResponse.json();
-          console.error('Failed to create chat:', errorData);
-          toast({
-            title: "Error",
-            description: "Failed to create chat",
-            variant: "destructive"
-          });
-          return;
+          throw new Error('Failed to create chat')
         }
 
-        const newChat = await createChatResponse.json();
-        console.log('Created new chat:', newChat);
-        chatId = newChat._id;
-        setCurrentChatId(chatId);
+        const newChat = await createChatResponse.json()
+        chatId = newChat._id
+        setCurrentChatId(chatId)
       }
 
-      // Add user message to UI immediately
       const userMessage: Message = {
         content: input,
         role: 'user',
         timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, userMessage]);
+      }
+      setMessages(prev => [...prev, userMessage])
 
-      // Send the message
-      console.log('Sending message to chat:', chatId);
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -184,33 +134,22 @@ export default function ChatInterface() {
           role: 'user',
           chatId,
         }),
-      });
+      })
 
-      console.log('Message response status:', response.status);
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Failed to send message:', errorData);
-        toast({
-          title: "Error",
-          description: "Failed to send message",
-          variant: "destructive"
-        });
-        return;
+        throw new Error('Failed to send message')
       }
 
-      const data = await response.json();
-      console.log('Message response data:', data);
+      const data = await response.json()
 
-      // Update messages with the full chat history
       if (data.messages) {
         setMessages(data.messages.map((msg: any) => ({
           content: msg.content,
           role: msg.role,
           timestamp: new Date(msg.timestamp || Date.now()),
           sources: msg.sources
-        })));
+        })))
       } else if (data.response) {
-        // If we only got a response (old format), add it to existing messages
         const aiMessage: Message = {
           content: data.response,
           role: 'assistant',
@@ -223,27 +162,16 @@ export default function ChatInterface() {
               chunkId: doc.chunkId
             }
           }))
-        };
-        setMessages(prev => [...prev, aiMessage]);
+        }
+        setMessages(prev => [...prev, aiMessage])
       }
 
-      setInput('');
+      setInput('')
     } catch (error) {
-      console.error('Error in handleSubmit:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive"
-      });
+      console.error('Error in handleSubmit:', error)
+      setError('Failed to send message')
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit(e)
+      setIsLoading(false)
     }
   }
 
@@ -252,7 +180,7 @@ export default function ChatInterface() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-2">Please log in</h2>
-          <p className="text-muted-foreground">You need to be logged in to use the chat.</p>
+          <p className="text-gray-600">You need to be logged in to use the chat.</p>
         </div>
       </div>
     )
@@ -261,18 +189,16 @@ export default function ChatInterface() {
   return (
     <div className="flex h-full">
       {/* Documents Sidebar */}
-      <div className="w-80 border-r bg-muted/30 p-4 flex flex-col">
+      <div className="w-80 border-r bg-gray-50 p-4 flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Documents</h3>
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
+            className="px-3 py-1 text-sm border rounded hover:bg-gray-100 disabled:opacity-50"
           >
-            <Upload className="h-4 w-4 mr-2" />
             {isUploading ? "Uploading..." : "Upload"}
-          </Button>
+          </button>
         </div>
 
         <input
@@ -287,13 +213,13 @@ export default function ChatInterface() {
           {documents.map((doc) => (
             <div
               key={doc.id}
-              className="flex items-center justify-between p-3 bg-background rounded-lg border"
+              className="flex items-center justify-between p-3 bg-white rounded-lg border"
             >
               <div className="flex items-center space-x-2">
-                <File className="h-4 w-4 text-muted-foreground" />
+                <div className="w-4 h-4 text-gray-500">📄</div>
                 <div>
                   <p className="text-sm font-medium truncate">{doc.title}</p>
-                  <p className="text-xs text-muted-foreground capitalize">
+                  <p className="text-xs text-gray-500 capitalize">
                     {doc.type}
                   </p>
                 </div>
@@ -301,7 +227,7 @@ export default function ChatInterface() {
             </div>
           ))}
           {documents.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">
+            <p className="text-sm text-gray-500 text-center py-8">
               No documents uploaded yet. Upload a document to get started!
             </p>
           )}
@@ -310,23 +236,22 @@ export default function ChatInterface() {
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col">
-        <Card className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col bg-white border rounded-lg">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {(!messages || messages.length === 0) && (
               <div className="text-center py-8">
-                <p className="text-muted-foreground">
+                <p className="text-gray-500">
                   Start a conversation by typing a message below.
                 </p>
               </div>
             )}
             {messages?.map((message, index) => {
-              // Convert timestamp to Date if it's a string
               const timestamp = typeof message.timestamp === 'string' 
                 ? new Date(message.timestamp) 
-                : message.timestamp;
+                : message.timestamp
               
-              const messageKey = `message-${index}-${timestamp.getTime()}`;
+              const messageKey = `message-${index}-${timestamp.getTime()}`
               
               return (
                 <div
@@ -358,27 +283,30 @@ export default function ChatInterface() {
                     )}
                   </div>
                 </div>
-              );
+              )
             })}
           </div>
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="p-4 border-t">
             <div className="flex gap-2">
-              <Input
+              <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
                 placeholder="Type your message..."
                 disabled={isLoading}
-                className="flex-1"
+                className="flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <Button type="submit" disabled={isLoading || !input.trim()}>
-                <Send className="h-4 w-4" />
-              </Button>
+              <button
+                type="submit"
+                disabled={isLoading || !input.trim()}
+                className="px-4 py-2 text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+              >
+                {isLoading ? "Sending..." : "Send"}
+              </button>
             </div>
           </form>
-        </Card>
+        </div>
       </div>
     </div>
   )

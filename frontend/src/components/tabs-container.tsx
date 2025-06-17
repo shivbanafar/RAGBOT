@@ -1,35 +1,64 @@
 "use client"
 
-import { useSearchParams, useRouter } from "next/navigation"
-import { useEffect } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import Link from "next/link"
+import { useState } from "react"
 
 interface TabsContainerProps {
+  defaultValue: string
   children: React.ReactNode
-  defaultValue?: string
   className?: string
 }
 
-export function TabsContainer({ children, defaultValue = "overview", className }: TabsContainerProps) {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const tab = searchParams.get("tab") || defaultValue
-
-  useEffect(() => {
-    // Update URL when tab changes
-    const url = new URL(window.location.href)
-    url.searchParams.set("tab", tab)
-    window.history.replaceState({}, "", url.toString())
-  }, [tab])
+export function TabsContainer({ defaultValue, children, className = "" }: TabsContainerProps) {
+  const [activeTab, setActiveTab] = useState(defaultValue)
 
   return (
-    <Tabs value={tab} onValueChange={(value) => {
-      const url = new URL(window.location.href)
-      url.searchParams.set("tab", value)
-      router.push(url.toString())
-    }} className={className}>
+    <div className={className}>
       {children}
-    </Tabs>
+    </div>
+  )
+}
+
+interface TabsListProps {
+  children: React.ReactNode
+  className?: string
+}
+
+export function TabsList({ children, className = "" }: TabsListProps) {
+  return (
+    <div className={`flex space-x-2 ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+interface TabsTriggerProps {
+  value: string
+  children: React.ReactNode
+  className?: string
+  onClick?: () => void
+}
+
+export function TabsTrigger({ value, children, className = "", onClick }: TabsTriggerProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${className}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+interface TabsContentProps {
+  value: string
+  children: React.ReactNode
+  className?: string
+}
+
+export function TabsContent({ value, children, className = "" }: TabsContentProps) {
+  return (
+    <div className={className}>
+      {children}
+    </div>
   )
 } 

@@ -1,25 +1,37 @@
 "use client"
 
-import { useSession, signIn, signOut } from "next-auth/react"
-import { Button } from "@/components/ui/button"
+import { signIn, signOut, useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 
-export function AuthButtons() {
-  const { data: session, status } = useSession()
+export default function AuthButtons() {
+  const { data: session } = useSession()
+  const router = useRouter()
 
-  if (status === "loading") {
-    return <Button variant="ghost" disabled>Loading...</Button>
-  }
-
-  if (status === "authenticated") {
+  if (session) {
     return (
-      <div className="flex items-center space-x-2">
-        <span className="text-sm">{session.user?.name || session.user?.email}</span>
-        <Button variant="outline" onClick={() => signOut()}>Logout</Button>
-      </div>
+      <button
+        onClick={() => signOut()}
+        className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+      >
+        Sign Out
+      </button>
     )
   }
 
   return (
-    <Button variant="outline" onClick={() => signIn()}>Login</Button>
+    <div className="flex gap-2">
+      <button
+        onClick={() => signIn()}
+        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      >
+        Sign In
+      </button>
+      <button
+        onClick={() => router.push("/register")}
+        className="px-4 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      >
+        Register
+      </button>
+    </div>
   )
 } 
